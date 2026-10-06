@@ -48,6 +48,15 @@ header h1 { font-size: 22px; margin: 0; letter-spacing: .3px; }
 .status.warn { background: var(--warn-bg); color: var(--warn); animation: blink 0.8s steps(2) infinite; }
 .status.stop { background: var(--stop-bg); color: var(--stop); }
 .status.none { background: var(--card); color: var(--muted); }
+.status.nr { background: var(--warn-bg); color: var(--warn); }
+.status .big.small { font-size: 34px; }
+.wl { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.wl:last-child { border-bottom: 0; }
+.wl time { color: var(--muted); font-variant-numeric: tabular-nums; width: 64px; flex: none; }
+.wl .len { font-weight: 600; font-variant-numeric: tabular-nums; width: 64px; flex: none; }
+.wl .okbar { flex: 1; height: 8px; background: var(--track); border-radius: 5px; overflow: hidden; }
+.wl .okbar i { display: block; height: 100%; background: var(--ok); }
+.wl .pct { width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 @keyframes blink { 50% { filter: brightness(0.85); } }
 @media (prefers-reduced-motion: reduce) { .status.warn { animation: none; } }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -165,6 +174,24 @@ nav button.on { color: var(--accent); font-weight: 600; }
     <div class="card">
       <h2>Svejsning</h2>
       <table>
+        <tr><td>Svejsetid</td><td id="wT">–</td></tr>
+        <tr><td>Antal svejsninger</td><td id="wN">–</td></tr>
+        <tr><td>Gennemsnitlig svejselængde</td><td id="wAvg">–</td></tr>
+        <tr><td>Længste svejsning</td><td id="wMax">–</td></tr>
+        <tr><td>Overholdt (inden for grænsen og nok luft)</td><td id="wOk">–</td></tr>
+        <tr><td>Start afvist (IKKE KLAR)</td><td id="wRef">–</td></tr>
+        <tr><td>Svejsninger afbrudt af STOP</td><td id="wStp">–</td></tr>
+      </table>
+      <div class="note">Svejsetid er tiden, hvor knappen på håndtaget er trykket, og relæet er trukket.</div>
+    </div>
+    <div class="card">
+      <h2>Seneste svejsninger</h2>
+      <div id="wList" class="sub">Ingen svejsninger endnu.</div>
+      <div class="note">Søjlen viser, hvor stor en del af svejsningen der var inden for grænsen med nok luft. Kun siden opstart.</div>
+    </div>
+    <div class="card">
+      <h2>Udsugning i brug</h2>
+      <table>
         <tr><td>Tid i brug</td><td id="sUse">–</td></tr>
         <tr><td>Inden for grænsen</td><td id="sOk">–</td></tr>
         <tr><td>For langt væk</td><td id="sFar">–</td></tr>
@@ -262,11 +289,12 @@ const STATS  = '8f1e0003-6c2a-4d8e-9b1a-57454c445345';
 const CFG    = '8f1e0004-6c2a-4d8e-9b1a-57454c445345';
 const CMD    = '8f1e0005-6c2a-4d8e-9b1a-57454c445345';
 const EVENTS = '8f1e0006-6c2a-4d8e-9b1a-57454c445345';
+const WELDS  = '8f1e0007-6c2a-4d8e-9b1a-57454c445345';   // findes kun i firmware med startknap
 
 const $ = id => document.getElementById(id);
 const dec = new TextDecoder(), enc = new TextEncoder();
 let dev = null, ch = {}, demo = null, pollTimer = null, slowCount = 0;
-let live = null, cfg = null, stats = null, events = null, statsKey = 'ses';
+let live = null, cfg = null, stats = null, events = null, welds = null, statsKey = 'ses';
 let upAtRead = 0, readAt = 0;
 const hist = [];   // [tid ms, afstand cm eller null, tryk Pa eller null]
 
@@ -307,6 +335,7 @@ async function openGatt() {
   const svc = await server.getPrimaryService(SVC);
   for (const [k, u] of [['live', LIVE], ['stats', STATS], ['cfg', CFG], ['cmd', CMD], ['events', EVENTS]])
     ch[k] = await svc.getCharacteristic(u);
+  try { ch.welds = await svc.getCharacteristic(WELDS); } catch (e) { ch.welds = null; }   // ældre firmware
   setConn('Forbundet', true);
   $('connectBox').classList.add('hide');
   await readSlow();
@@ -354,6 +383,7 @@ async function readSlow() {
   cfg = await readJson(ch.cfg);
   stats = await readJson(ch.stats);
   events = await readJson(ch.events);
+  welds = ch.welds ? await readJson(ch.welds) : null;
   renderCfg(); renderStats(); renderEvents();
 }
 
@@ -408,13 +438,16 @@ function causeText(l) {
 function renderLive() {
   if (!live) return;
   const l = live, st = $('status');
-  const cls = ['ok', 'warn', 'stop'][l.s] || 'none';
+  const cls = ['ok', 'warn', 'stop', 'nr'][l.s] || 'none';
   st.className = 'status ' + cls;
-  $('stBig').textContent = ['OK', 'ADVARSEL', 'STOP'][l.s];
+  $('stBig').textContent = ['KLAR', 'ADVARSEL', 'STOP', 'IKKE KLAR'][l.s];
+  $('stBig').classList.toggle('small', l.s === 3);
   let why = causeText(l);
   if (l.s === 1 && l.left >= 0) why += (why ? ' · ' : '') + (l.sir ? 'Stop om ' : 'Sirene om ') + l.left + ' s';
-  if (l.s === 2) why += (why ? ' · ' : '') + 'Tråden er stoppet';
-  $('stWhy').textContent = why || 'Alt er fint';
+  if (l.s === 2) why += (why ? ' · ' : '') + 'Tråden er stoppet. Slip knappen';
+  if (l.s === 3) why += (why ? ' · ' : '') + 'Start afvises';
+  if (l.w && l.s !== 2) why = 'Svejser ' + (l.wds / 10).toFixed(1).replace('.', ',') + ' s' + (why ? ' · ' + why : '');
+  $('stWhy').textContent = why || (l.b === undefined ? 'Alt er fint' : 'Klar til at svejse');
 
   const lim = cfg ? cfg.lim : 0.6;
   $('dist').textContent = l.lk ? fmtCm(l.d) : '–';
@@ -482,22 +515,58 @@ function score(s) {
   return Math.max(0, Math.min(100, Math.round(100 * s.ok / base - 5 * s.sf)));
 }
 
+// Med startknap: andel af svejsetiden, der var OK, minus 5 point pr. STOP under svejsning
+function weldScore(w) {
+  if (!w || w.t < 600) return null;    // under 1 minuts svejsning: for lidt at vurdere
+  return Math.max(0, Math.min(100, Math.round(100 * w.ok / w.t - 5 * w.stp)));
+}
+const ds = v => dur(v / 10);
+const dsShort = v => v < 600 ? (v / 10).toFixed(1).replace('.', ',') + ' s' : dur(v / 10);
+
+function renderWelds() {
+  const w = welds && welds[statsKey];
+  if (!w) {
+    for (const id of ['wT', 'wN', 'wAvg', 'wMax', 'wOk', 'wRef', 'wStp']) $(id).textContent = '–';
+    $('wList').textContent = welds ? 'Ingen svejsninger endnu.' : 'Kræver firmware med startknap.';
+    return;
+  }
+  $('wT').textContent = ds(w.t); $('wN').textContent = w.n;
+  $('wAvg').textContent = w.n ? dsShort(w.t / w.n) : '–';
+  $('wMax').textContent = w.n ? dsShort(w.max) : '–';
+  $('wOk').textContent = w.t ? Math.round(100 * w.ok / w.t) + ' %' : '–';
+  $('wRef').textContent = w.ref; $('wStp').textContent = w.stp;
+  if (!welds.list.length) { $('wList').textContent = 'Ingen svejsninger endnu.'; return; }
+  const bootMs = Date.now() - welds.up * 1000;
+  $('wList').innerHTML = welds.list.slice().reverse().map(([t, len, ok, stp]) => {
+    const d = new Date(bootMs + t * 1000);
+    const hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+    return '<div class="wl"><time>' + hh + ':' + mm + '</time><span class="len">' + dsShort(len) + '</span>' +
+      '<span class="okbar"><i style="width:' + ok + '%;background:' + (ok >= 90 ? 'var(--ok)' : ok >= 60 ? 'var(--warn)' : 'var(--stop)') + '"></i></span>' +
+      '<span class="pct">' + ok + ' %</span>' + (stp ? '<span class="tag">STOP</span>' : '') + '</div>';
+  }).join('');
+}
+
 function renderStats() {
   if (!stats) return;
+  renderWelds();
   const s = stats[statsKey];
-  const sc = score(s);
+  const w = welds && welds[statsKey];
+  const wsc = weldScore(w);
+  const sc = wsc != null ? wsc : score(s);
   const arc = $('ringArc'), circ = 2 * Math.PI * 42;
   if (sc == null) {
     arc.setAttribute('stroke-dasharray', '0 ' + circ);
     $('ringTxt').textContent = '–';
     $('grade').textContent = 'Svejs lidt mere';
-    $('scoreWhy').textContent = 'Scoren kommer, når der er mindst 1 minut i brug.';
+    $('scoreWhy').textContent = 'Scoren kommer, når der er svejset i mindst 1 minut.';
   } else {
     arc.setAttribute('stroke-dasharray', (circ * sc / 100) + ' ' + circ);
     arc.setAttribute('stroke', sc >= 75 ? 'var(--ok)' : sc >= 50 ? 'var(--warn)' : 'var(--stop)');
     $('ringTxt').textContent = sc;
     $('grade').textContent = sc >= 90 ? 'Rigtig godt' : sc >= 75 ? 'Godt' : sc >= 50 ? 'Kan blive bedre' : 'Ryk udsugningen med';
-    $('scoreWhy').textContent = Math.round(100 * s.ok / (s.ok + s.far)) + ' % af tiden inden for grænsen' + (s.sf ? ', minus 5 point for hvert stop (' + s.sf + ')' : '') + '.';
+    $('scoreWhy').textContent = wsc != null
+      ? Math.round(100 * w.ok / w.t) + ' % af svejsetiden inden for grænsen med nok luft' + (w.stp ? ', minus 5 point for hvert stop (' + w.stp + ')' : '') + '.'
+      : Math.round(100 * s.ok / (s.ok + s.far)) + ' % af tiden inden for grænsen' + (s.sf ? ', minus 5 point for hvert stop (' + s.sf + ')' : '') + '.';
   }
   $('sUse').textContent = dur(s.use); $('sOk').textContent = dur(s.ok); $('sFar').textContent = dur(s.far);
   $('sLink').textContent = dur(s.link); $('sAir').textContent = dur(s.air); $('sRun').textContent = dur(s.run);
@@ -506,7 +575,7 @@ function renderStats() {
   $('sSf').textContent = s.sf; $('sSa').textContent = s.sa; $('sSl').textContent = s.sl; $('sBoot').textContent = s.boot;
 }
 
-const EV = { 1: 'Advarsel', 2: 'Sirene', 3: 'Tråden stoppet', 4: 'OK igen', 5: 'Afstand nulstillet', 6: 'Indstilling ændret', 7: 'Tændt' };
+const EV = { 1: 'Advarsel', 2: 'Sirene', 3: 'Tråden stoppet', 4: 'OK igen', 5: 'Afstand nulstillet', 6: 'Indstilling ændret', 7: 'Tændt', 8: 'Start afvist (IKKE KLAR)' };
 function causeTags(c) {
   const t = [];
   if (c & 1) t.push('for langt væk'); if (c & 2) t.push('for lidt luft'); if (c & 4) t.push('ingen forbindelse');
@@ -549,7 +618,8 @@ function startDemo() {
   const t0 = Date.now();
   const mk = () => ({ run: 0, air: 0, use: 0, ok: 0, far: 0, link: 0, wf: 0, wa: 0, wl: 0, sf: 0, sa: 0, sl: 0, fb: 0, fs: 0, boot: 1 });
   demo = { duct: 160, min: 50, ses: mk(), tot: Object.assign(mk(), { run: 41000, air: 30500, use: 29800, ok: 27100, far: 2400, link: 300, wf: 61, wa: 3, wl: 4, sf: 4, sa: 1, sl: 0, fb: 44, fs: 13, boot: 23 }),
-    ev: [[0, 7, 0]], fault: 0, faultAt: 0, offset: 0, last: 0 };
+    ev: [[0, 7, 0]], fault: 0, faultAt: 0, offset: 0, last: 0,
+    wses: { t: 0, ok: 0, n: 0, max: 0, ref: 0, stp: 0 }, wtot: { t: 186400, ok: 171200, n: 3120, max: 1480, ref: 41, stp: 4 }, wlist: [], wStart: 0, wOk: 0 };
   cfg = { lim: 0.6, limlo: 40, limhi: 120, min: 50, minlo: 30, minhi: 120, duct: 160, ductlo: 80, ducthi: 500, overms: 2000, overlo: 500, overhi: 5000, sirms: 3000, sirlo: 0, sirhi: 10000, stopms: 10000, stoplo: 5000, stophi: 30000, lowms: 5000, sat: 124 };
   setConn('Demo', true);
   $('connectBox').classList.add('hide');
@@ -573,9 +643,23 @@ function startDemo() {
       demo.last = Math.floor(up);
       for (const k of ['ses', 'tot']) { const x = demo[k]; x.run++; x.air++; x.use++; d > 0.6 ? x.far++ : x.ok++; }
     }
-    live = { s, d, lk: 1, p, pv: 1, q: qFromPa(p), far: far ? 1 : 0, al: 0, sir, left, c: demo.fault ? 1 : 0, up: Math.round(up), r: demo.r || '' };
+    // Svejsninger: 8 s svejs, 4 s pause; under "for langt væk" svejses der videre (advarsel)
+    const weldOn = (up % 12) < 8;
+    if (weldOn && !demo.wStart) { demo.wStart = now; demo.wOk = 0; }
+    if (weldOn && s === 0) demo.wOk += 500;
+    if (!weldOn && demo.wStart) {
+      const len = Math.round((now - demo.wStart) / 100), ok = Math.min(len, Math.round(demo.wOk / 100));
+      for (const x of [demo.wses, demo.wtot]) { x.t += len; x.ok += ok; x.n++; x.max = Math.max(x.max, len); }
+      demo.wlist.push([Math.round((demo.wStart - t0) / 1000), len, Math.round(100 * ok / len), 0]);
+      if (demo.wlist.length > 15) demo.wlist.shift();
+      demo.wStart = 0;
+    }
+    if (s === 0 && !weldOn && d > 0.6) s = 3;   // står for langt væk uden at svejse: IKKE KLAR
+    live = { s, d, lk: 1, p, pv: 1, q: qFromPa(p), far: far ? 1 : 0, al: 0, sir, left, c: demo.fault ? 1 : 0, up: Math.round(up),
+      b: weldOn ? 3 : 0, w: weldOn ? 1 : 0, wds: weldOn ? Math.round((now - demo.wStart) / 100) : 0, r: demo.r || '' };
     cfg.duct = demo.duct; cfg.min = demo.min;
     stats = { ses: demo.ses, tot: demo.tot };
+    welds = { up: Math.round(up), ses: demo.wses, tot: demo.wtot, list: demo.wlist };
     events = { up: Math.round(up), ev: demo.ev.slice(-25) };
     pushHist(); renderLive();
     if (++slowCount % 6 === 0) { renderStats(); renderEvents(); renderCfg(); }
@@ -594,7 +678,7 @@ function demoCmd(t) {
     if (m < k[1] || m > k[2]) demo.r = 'uden for graense'; else { cfg[k[0]] = m; demo.r = 'ok'; }
   }
   else if (c === 'duct') { const m = +v; if (m < 80 || m > 500) demo.r = 'uden for graense'; else { demo.duct = m; demo.r = 'ok'; } }
-  else if (c === 'reset') { for (const k in demo.tot) if (k !== 'boot') demo.tot[k] = 0; demo.r = 'ok'; }
+  else if (c === 'reset') { for (const k in demo.tot) if (k !== 'boot') demo.tot[k] = 0; for (const k in demo.wtot) demo.wtot[k] = 0; demo.r = 'ok'; }
   else demo.r = 'ok';
   live.r = demo.r; cfg.duct = demo.duct; cfg.min = demo.min; renderCfg(); renderStats();
 }
