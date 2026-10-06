@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="WeldSense">
+<meta name="theme-color" content="#0f1417">
+<title>WeldSense</title>
+<style>
+:root {
+  --bg: #f3f5f6; --card: #ffffff; --ink: #14191c; --muted: #5d6870; --line: #dde3e6;
+  --ok: #1f8a4c; --ok-bg: #e3f4ea; --warn: #b86400; --warn-bg: #fff1dc;
+  --stop: #c4271d; --stop-bg: #fde6e4; --accent: #1d5fa8; --track: #e6ebee;
+  --far: #e0751a; --air: #2a7bd6; --on-accent: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1417; --card: #182024; --ink: #ecf0f2; --muted: #9aa7ae; --line: #2a353b;
+    --ok: #46c27a; --ok-bg: #12301f; --warn: #f2a13a; --warn-bg: #352713;
+    --stop: #f0645a; --stop-bg: #3a1714; --accent: #6aa8ec; --track: #26323a;
+    --far: #f2973f; --air: #62a6f0; --on-accent: #0f1417;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1417; --card: #182024; --ink: #ecf0f2; --muted: #9aa7ae; --line: #2a353b;
+  --ok: #46c27a; --ok-bg: #12301f; --warn: #f2a13a; --warn-bg: #352713;
+  --stop: #f0645a; --stop-bg: #3a1714; --accent: #6aa8ec; --track: #26323a;
+  --far: #f2973f; --air: #62a6f0; --on-accent: #0f1417;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+body { padding: env(safe-area-inset-top) 0 calc(72px + env(safe-area-inset-bottom)); }
+.wrap { max-width: 560px; margin: 0 auto; padding: 12px 16px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0 12px; }
+header h1 { font-size: 22px; margin: 0; letter-spacing: .3px; }
+.conn { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.dot.on { background: var(--ok); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+.card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.status { text-align: center; padding: 18px 12px; border-radius: 14px; margin-bottom: 12px; border: 1px solid var(--line); }
+.status .big { font-size: 40px; font-weight: 800; letter-spacing: 1px; }
+.status .why { font-size: 15px; margin-top: 4px; min-height: 21px; }
+.status.ok { background: var(--ok-bg); color: var(--ok); }
+.status.warn { background: var(--warn-bg); color: var(--warn); animation: blink 0.8s steps(2) infinite; }
+.status.stop { background: var(--stop-bg); color: var(--stop); }
+.status.none { background: var(--card); color: var(--muted); }
+@keyframes blink { 50% { filter: brightness(0.85); } }
+@media (prefers-reduced-motion: reduce) { .status.warn { animation: none; } }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.val { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.unit { font-size: 15px; color: var(--muted); font-weight: 500; margin-left: 3px; }
+.sub { font-size: 13px; color: var(--muted); }
+.bar { position: relative; height: 10px; background: var(--track); border-radius: 6px; margin: 10px 0 4px; overflow: hidden; }
+.bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--ok); transition: width .3s; }
+.bar > b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: .6; }
+canvas { width: 100%; height: 150px; display: block; }
+.legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: currentColor; }
+.lg-far { color: var(--far); } .lg-air { color: var(--air); }
+.score { display: flex; align-items: center; gap: 16px; }
+.ring { width: 96px; height: 96px; flex: none; }
+.score .txt { font-size: 15px; }
+.score .grade { font-size: 20px; font-weight: 700; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+td { padding: 7px 0; border-bottom: 1px solid var(--line); }
+td:last-child { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+.seg { display: flex; background: var(--track); border-radius: 10px; padding: 3px; margin-bottom: 12px; }
+.seg button { flex: 1; border: 0; background: transparent; color: var(--ink); padding: 8px; border-radius: 8px; font: inherit; font-size: 14px; }
+.seg button.on { background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.15); font-weight: 600; }
+.btn { display: block; width: 100%; border: 0; border-radius: 12px; padding: 14px; font: inherit; font-weight: 600; background: var(--accent); color: var(--on-accent); margin-top: 10px; cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+.btn.danger { background: transparent; color: var(--stop); border: 1px solid var(--line); }
+.btn:disabled { opacity: .45; }
+label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+.row { display: flex; gap: 8px; }
+input { flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
+.row .btn { width: auto; margin-top: 0; padding: 11px 16px; }
+.note { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.msg { font-size: 14px; margin-top: 8px; min-height: 20px; }
+.msg.bad { color: var(--stop); } .msg.good { color: var(--ok); }
+.ev { display: flex; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.ev:last-child { border-bottom: 0; }
+.ev time { color: var(--muted); font-variant-numeric: tabular-nums; width: 64px; flex: none; }
+.tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 6px; margin-left: 4px; background: var(--track); color: var(--muted); }
+nav { position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+  display: flex; padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+nav button { flex: 1; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; padding: 10px 4px 8px; }
+nav button svg { display: block; margin: 0 auto 2px; width: 22px; height: 22px; }
+nav button.on { color: var(--accent); font-weight: 600; }
+.page { display: none; } .page.on { display: block; }
+.intro p { margin: 0 0 10px; }
+.hide { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>WeldSense</h1>
+    <div class="conn"><span class="dot" id="dot"></span><span id="connTxt">Ikke forbundet</span></div>
+  </header>
+
+  <!-- Forbind -->
+  <div id="connectBox" class="card intro">
+    <p><b>Forbind til udsugningskraven.</b> Tænd for WeldSense og hold telefonen i nærheden.</p>
+    <p class="sub" id="btHelp"></p>
+    <button class="btn" id="btnConnect">Forbind</button>
+    <button class="btn ghost" id="btnDemo">Prøv med demodata</button>
+  </div>
+
+  <!-- LIVE -->
+  <section class="page on" id="p-live">
+    <div class="status none" id="status"><div class="big" id="stBig">–</div><div class="why" id="stWhy">Ikke forbundet</div></div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Afstand</h2>
+        <div><span class="val" id="dist">–</span><span class="unit">cm</span></div>
+        <div class="bar"><i id="distBar"></i><b id="distMark"></b></div>
+        <div class="sub" id="distSub">Grænse –</div>
+      </div>
+      <div class="card">
+        <h2>Tryk</h2>
+        <div><span class="val" id="pa">–</span><span class="unit">Pa</span></div>
+        <div class="bar"><i id="paBar"></i><b id="paMark"></b></div>
+        <div class="sub" id="paSub">Mindst –</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Luftmængde</h2>
+      <div><span class="val" id="q">–</span><span class="unit">m³/h</span></div>
+      <div class="sub" id="qSub">Rør Ø–</div>
+    </div>
+    <div class="card">
+      <h2>Seneste 2 minutter</h2>
+      <canvas id="chart"></canvas>
+      <div class="legend"><span class="lg-far">Afstand (cm)</span><span class="lg-air">Tryk (Pa)</span></div>
+    </div>
+  </section>
+
+  <!-- STATISTIK -->
+  <section class="page" id="p-stats">
+    <div class="seg" id="segStats">
+      <button data-k="ses" class="on">Siden opstart</button>
+      <button data-k="tot">I alt</button>
+    </div>
+    <div class="card">
+      <h2>Udsugningsscore</h2>
+      <div class="score">
+        <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--track)" stroke-width="10"/>
+          <circle id="ringArc" cx="50" cy="50" r="42" fill="none" stroke="var(--ok)" stroke-width="10"
+            stroke-linecap="round" stroke-dasharray="0 264" transform="rotate(-90 50 50)"/>
+          <text id="ringTxt" x="50" y="58" text-anchor="middle" font-size="26" font-weight="800" fill="var(--ink)">–</text>
+        </svg>
+        <div class="txt">
+          <div class="grade" id="grade">–</div>
+          <div class="sub" id="scoreWhy">Hvor godt du rykker udsugningen med dig.</div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Svejsning</h2>
+      <table>
+        <tr><td>Tid i brug</td><td id="sUse">–</td></tr>
+        <tr><td>Inden for grænsen</td><td id="sOk">–</td></tr>
+        <tr><td>For langt væk</td><td id="sFar">–</td></tr>
+        <tr><td>Uden forbindelse til håndtaget</td><td id="sLink">–</td></tr>
+        <tr><td>Udsugning kørende</td><td id="sAir">–</td></tr>
+        <tr><td>Tændt</td><td id="sRun">–</td></tr>
+      </table>
+      <div class="note">"I brug" er tid, hvor udsugningen kører. Et STOP, der varer over 1 minut, regnes som pause.</div>
+    </div>
+    <div class="card">
+      <h2>Afbrydelser</h2>
+      <table>
+        <tr><td>Advarsler, for langt væk</td><td id="sWf">–</td></tr>
+        <tr><td>&nbsp;&nbsp;rettet før sirenen</td><td id="sFb">–</td></tr>
+        <tr><td>&nbsp;&nbsp;rettet under sirenen</td><td id="sFs">–</td></tr>
+        <tr><td>Advarsler, for lidt luft</td><td id="sWa">–</td></tr>
+        <tr><td>Advarsler, ingen forbindelse</td><td id="sWl">–</td></tr>
+        <tr><td><b>Tråden stoppet</b>, for langt væk</td><td id="sSf">–</td></tr>
+        <tr><td><b>Tråden stoppet</b>, for lidt luft</td><td id="sSa">–</td></tr>
+        <tr><td><b>Tråden stoppet</b>, ingen forbindelse</td><td id="sSl">–</td></tr>
+        <tr><td>Opstarter</td><td id="sBoot">–</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- HÆNDELSER -->
+  <section class="page" id="p-events">
+    <div class="card">
+      <h2>Hændelser siden opstart</h2>
+      <div id="evList" class="sub">Ingen hændelser endnu.</div>
+    </div>
+  </section>
+
+  <!-- INDSTILLINGER -->
+  <section class="page" id="p-cfg">
+    <div class="card">
+      <h2>Kode</h2>
+      <label for="pin">Kode til at ændre indstillinger</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="Kode">
+      <div class="note">Koden står i Initiator-koden (APP_PIN). Den huskes kun på denne telefon.</div>
+    </div>
+    <div class="card">
+      <h2>Rør og luft</h2>
+      <label for="duct">Rørdiameter (mm)</label>
+      <div class="row"><input id="duct" type="number" inputmode="numeric"><button class="btn" id="btnDuct">Gem</button></div>
+      <div class="note" id="ductNote">Bruges kun til at regne luftmængden ud.</div>
+      <label for="minpa">Mindstetryk (Pa)</label>
+      <div class="row"><input id="minpa" type="number" inputmode="decimal" step="1"><button class="btn" id="btnMin">Gem</button></div>
+      <div class="note" id="minNote">Under dette tryk regnes udsugningen som stoppet.</div>
+      <div class="msg" id="cfgMsg"></div>
+    </div>
+    <div class="card">
+      <h2>Faste sikkerhedsgrænser</h2>
+      <table>
+        <tr><td>Afstandsgrænse</td><td id="cLim">–</td></tr>
+        <tr><td>Skærmen blinker før sirenen</td><td id="cSir">–</td></tr>
+        <tr><td>Sirene før tråden stoppes</td><td id="cStop">–</td></tr>
+        <tr><td>For lidt luft før alarm</td><td id="cLow">–</td></tr>
+      </table>
+      <div class="note">Disse kan kun ændres i koden. Alarmen kan ikke slås fra i appen.</div>
+    </div>
+    <div class="card">
+      <h2>Handlinger</h2>
+      <button class="btn ghost" id="btnZero">Nulstil afstand (som knappen)</button>
+      <button class="btn danger" id="btnReset">Nulstil statistik "I alt"</button>
+      <button class="btn ghost" id="btnDisc">Afbryd forbindelse</button>
+      <div class="msg" id="actMsg"></div>
+    </div>
+  </section>
+</div>
+
+<nav>
+  <button data-p="live" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Live</button>
+  <button data-p="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Statistik</button>
+  <button data-p="events"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Hændelser</button>
+  <button data-p="cfg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Indstillinger</button>
+</nav>
+
+<script>
+// Samme UUID'er som i Initiator_v2_ble.ino
+const SVC    = '8f1e0001-6c2a-4d8e-9b1a-57454c445345';
+const LIVE   = '8f1e0002-6c2a-4d8e-9b1a-57454c445345';
+const STATS  = '8f1e0003-6c2a-4d8e-9b1a-57454c445345';
+const CFG    = '8f1e0004-6c2a-4d8e-9b1a-57454c445345';
+const CMD    = '8f1e0005-6c2a-4d8e-9b1a-57454c445345';
+const EVENTS = '8f1e0006-6c2a-4d8e-9b1a-57454c445345';
+
+const $ = id => document.getElementById(id);
+const dec = new TextDecoder(), enc = new TextEncoder();
+let dev = null, ch = {}, demo = null, pollTimer = null, slowCount = 0;
+let live = null, cfg = null, stats = null, events = null, statsKey = 'ses';
+let upAtRead = 0, readAt = 0;
+const hist = [];   // [tid ms, afstand cm eller null, tryk Pa eller null]
+
+/* ---------- Bluetooth ---------- */
+const hasBt = !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
+if (!hasBt) {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  $('btHelp').textContent = ios
+    ? 'Safari kan ikke bruge Bluetooth. Åbn siden i den gratis app Bluefy fra App Store.'
+    : 'Denne browser kan ikke bruge Bluetooth. Brug Chrome på Mac/PC eller Bluefy på iPhone.';
+  $('btnConnect').disabled = true;
+}
+
+// Én Bluetooth-operation ad gangen (ellers melder telefonen "GATT busy")
+let queue = Promise.resolve();
+function gatt(fn) { const p = queue.then(fn, fn); queue = p.catch(() => {}); return p; }
+
+async function readJson(c) {
+  const v = await gatt(() => c.readValue());
+  return JSON.parse(dec.decode(v.buffer ? new Uint8Array(v.buffer, v.byteOffset, v.byteLength) : v));
+}
+
+async function connect() {
+  try {
+    setConn('Søger…', false);
+    dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }, { namePrefix: 'WeldSense' }], optionalServices: [SVC] });
+    dev.addEventListener('gattserverdisconnected', onDisconnected);
+    await openGatt();
+  } catch (e) {
+    setConn('Ikke forbundet', false);
+    if (e && e.name !== 'NotFoundError') alert('Kunne ikke forbinde: ' + e.message);
+  }
+}
+
+async function openGatt() {
+  setConn('Forbinder…', false);
+  const server = await dev.gatt.connect();
+  const svc = await server.getPrimaryService(SVC);
+  for (const [k, u] of [['live', LIVE], ['stats', STATS], ['cfg', CFG], ['cmd', CMD], ['events', EVENTS]])
+    ch[k] = await svc.getCharacteristic(u);
+  setConn('Forbundet', true);
+  $('connectBox').classList.add('hide');
+  await readSlow();
+  startPolling();
+}
+
+function onDisconnected() {
+  stopPolling();
+  setConn('Forbindelsen tabt, prøver igen…', false);
+  // Prøv at genforbinde et par gange (fx når man går lidt væk)
+  let tries = 0;
+  const retry = async () => {
+    if (!dev || demo) return;
+    try { await openGatt(); }
+    catch (e) { if (++tries < 5) setTimeout(retry, 2000); else { setConn('Ikke forbundet', false); $('connectBox').classList.remove('hide'); showNone(); } }
+  };
+  setTimeout(retry, 1000);
+}
+
+function disconnect() {
+  const d = dev; dev = null;
+  stopPolling(); stopDemo();
+  if (d && d.gatt.connected) d.gatt.disconnect();
+  setConn('Ikke forbundet', false);
+  $('connectBox').classList.remove('hide');
+  showNone();
+}
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(async () => {
+    if (!dev || !dev.gatt.connected) return;
+    try {
+      live = await readJson(ch.live);
+      upAtRead = live.up; readAt = Date.now();
+      pushHist();
+      renderLive();
+      if (++slowCount % 6 === 0) await readSlow();
+    } catch (e) { /* enkelt fejllæsning ignoreres */ }
+  }, 500);
+}
+function stopPolling() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
+async function readSlow() {
+  cfg = await readJson(ch.cfg);
+  stats = await readJson(ch.stats);
+  events = await readJson(ch.events);
+  renderCfg(); renderStats(); renderEvents();
+}
+
+async function sendCmd(text, msgEl) {
+  msgEl.className = 'msg'; msgEl.textContent = 'Sender…';
+  try {
+    if (demo) { demoCmd(text); }
+    else {
+      const data = enc.encode(text);
+      await gatt(() => ch.cmd.writeValueWithResponse ? ch.cmd.writeValueWithResponse(data) : ch.cmd.writeValue(data));
+      await new Promise(r => setTimeout(r, 700));     // enheden svarer i næste opdatering
+      live = await readJson(ch.live);
+      await readSlow();
+    }
+    const r = live && live.r;
+    if (r === 'ok') { msgEl.className = 'msg good'; msgEl.textContent = 'Gemt.'; }
+    else { msgEl.className = 'msg bad'; msgEl.textContent = ({ 'forkert kode': 'Forkert kode.', 'uden for graense': 'Værdien er uden for de tilladte grænser.', 'ingen afstand': 'Ingen afstandsmåling lige nu.' })[r] || ('Svar: ' + r); }
+  } catch (e) { msgEl.className = 'msg bad'; msgEl.textContent = 'Kunne ikke sende: ' + e.message; }
+}
+
+function pin() {
+  const p = $('pin').value.trim();
+  try { localStorage.setItem('ws_pin', p); } catch (e) {}
+  return p;
+}
+
+/* ---------- Visning ---------- */
+function setConn(t, on) { $('connTxt').textContent = t; $('dot').classList.toggle('on', on); }
+
+const fmtCm = m => Math.round(m * 100);
+function dur(s) {
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  if (h) return h + ' t ' + m + ' min';
+  if (m) return m + ' min ' + (s % 60) + ' s';
+  return s + ' s';
+}
+
+function showNone() {
+  const st = $('status'); st.className = 'status none';
+  $('stBig').textContent = '–'; $('stWhy').textContent = 'Ikke forbundet';
+}
+
+function causeText(l) {
+  const w = [];
+  if (!l.lk) w.push('Ingen forbindelse til håndtaget');
+  else if (l.far) w.push('For langt væk');
+  if (l.al) w.push('For lidt luft');
+  return w.join(' · ');
+}
+
+function renderLive() {
+  if (!live) return;
+  const l = live, st = $('status');
+  const cls = ['ok', 'warn', 'stop'][l.s] || 'none';
+  st.className = 'status ' + cls;
+  $('stBig').textContent = ['OK', 'ADVARSEL', 'STOP'][l.s];
+  let why = causeText(l);
+  if (l.s === 1 && l.left >= 0) why += (why ? ' · ' : '') + (l.sir ? 'Stop om ' : 'Sirene om ') + l.left + ' s';
+  if (l.s === 2) why += (why ? ' · ' : '') + 'Tråden er stoppet';
+  $('stWhy').textContent = why || 'Alt er fint';
+
+  const lim = cfg ? cfg.lim : 0.6;
+  $('dist').textContent = l.lk ? fmtCm(l.d) : '–';
+  const dMax = lim * 1.6;
+  $('distBar').style.width = (l.lk ? Math.min(100, l.d / dMax * 100) : 0) + '%';
+  $('distBar').style.background = l.d > lim ? 'var(--stop)' : (l.d > lim * 0.85 ? 'var(--warn)' : 'var(--ok)');
+  $('distMark').style.left = (lim / dMax * 100) + '%';
+  $('distSub').textContent = 'Grænse ' + fmtCm(lim) + ' cm';
+
+  const sat = cfg ? cfg.sat : 124, min = cfg ? cfg.min : 50, pMax = 140;
+  const pa = Math.abs(l.p);
+  $('pa').textContent = l.pv ? (pa >= sat ? '>125' : pa.toFixed(1)) : 'FEJL';
+  $('paBar').style.width = (l.pv ? Math.min(100, pa / pMax * 100) : 0) + '%';
+  $('paBar').style.background = !l.pv || pa < min ? 'var(--stop)' : 'var(--ok)';
+  $('paMark').style.left = (min / pMax * 100) + '%';
+  $('paSub').textContent = 'Mindst ' + Math.round(min) + ' Pa';
+
+  $('q').textContent = l.pv ? (pa >= sat ? '>' + Math.round(qFromPa(125)) : Math.round(l.q)) : '–';
+  $('qSub').textContent = 'Rør Ø' + (cfg ? cfg.duct : '–') + ' mm' + (l.pv && pa >= sat ? ' · sensoren måler kun op til 125 Pa' : '');
+  drawChart();
+}
+
+// Samme regnestykke som i Initiatoren (pitot, profilfaktor 0,85)
+function qFromPa(pa) {
+  const d = (cfg ? cfg.duct : 160) / 1000, area = Math.PI * d * d / 4;
+  return Math.sqrt(2 * Math.abs(pa) / 1.2) * area * 3600 * 0.85;
+}
+
+function pushHist() {
+  const now = Date.now();
+  hist.push([now, live.lk ? live.d * 100 : null, live.pv ? Math.abs(live.p) : null]);
+  while (hist.length && now - hist[0][0] > 120000) hist.shift();
+}
+
+function drawChart() {
+  const c = $('chart'), r = window.devicePixelRatio || 1;
+  const w = c.clientWidth, h = c.clientHeight;
+  if (!w) return;
+  c.width = w * r; c.height = h * r;
+  const g = c.getContext('2d'); g.scale(r, r); g.clearRect(0, 0, w, h);
+  const css = getComputedStyle(document.documentElement);
+  const now = Date.now(), yMax = 140, x = t => w - (now - t) / 120000 * w, y = v => h - 4 - Math.min(v, yMax) / yMax * (h - 8);
+  g.strokeStyle = css.getPropertyValue('--line'); g.lineWidth = 1;
+  g.fillStyle = css.getPropertyValue('--muted'); g.font = '11px -apple-system, sans-serif';
+  for (const v of [0, 50, 100]) { g.beginPath(); g.moveTo(0, y(v)); g.lineTo(w, y(v)); g.stroke(); g.fillText(v, 2, y(v) - 2); }
+  if (cfg) {   // grænser som stiplede linjer
+    g.setLineDash([4, 4]);
+    g.strokeStyle = css.getPropertyValue('--far'); g.beginPath(); g.moveTo(0, y(cfg.lim * 100)); g.lineTo(w, y(cfg.lim * 100)); g.stroke();
+    g.strokeStyle = css.getPropertyValue('--air'); g.beginPath(); g.moveTo(0, y(cfg.min)); g.lineTo(w, y(cfg.min)); g.stroke();
+    g.setLineDash([]);
+  }
+  for (const [i, col] of [[1, '--far'], [2, '--air']]) {
+    g.strokeStyle = css.getPropertyValue(col); g.lineWidth = 2; g.beginPath();
+    let pen = false;
+    for (const p of hist) { if (p[i] == null) { pen = false; continue; } pen ? g.lineTo(x(p[0]), y(p[i])) : g.moveTo(x(p[0]), y(p[i])); pen = true; }
+    g.stroke();
+  }
+}
+
+// Score: andel af tiden i brug, hvor håndtaget var inden for grænsen,
+// minus 5 point for hver gang tråden blev stoppet, fordi man var for langt væk.
+function score(s) {
+  const base = s.ok + s.far;
+  if (base < 60) return null;     // under 1 minut: for lidt at vurdere
+  return Math.max(0, Math.min(100, Math.round(100 * s.ok / base - 5 * s.sf)));
+}
+
+function renderStats() {
+  if (!stats) return;
+  const s = stats[statsKey];
+  const sc = score(s);
+  const arc = $('ringArc'), circ = 2 * Math.PI * 42;
+  if (sc == null) {
+    arc.setAttribute('stroke-dasharray', '0 ' + circ);
+    $('ringTxt').textContent = '–';
+    $('grade').textContent = 'Svejs lidt mere';
+    $('scoreWhy').textContent = 'Scoren kommer, når der er mindst 1 minut i brug.';
+  } else {
+    arc.setAttribute('stroke-dasharray', (circ * sc / 100) + ' ' + circ);
+    arc.setAttribute('stroke', sc >= 75 ? 'var(--ok)' : sc >= 50 ? 'var(--warn)' : 'var(--stop)');
+    $('ringTxt').textContent = sc;
+    $('grade').textContent = sc >= 90 ? 'Rigtig godt' : sc >= 75 ? 'Godt' : sc >= 50 ? 'Kan blive bedre' : 'Ryk udsugningen med';
+    $('scoreWhy').textContent = Math.round(100 * s.ok / (s.ok + s.far)) + ' % af tiden inden for grænsen' + (s.sf ? ', minus 5 point for hvert stop (' + s.sf + ')' : '') + '.';
+  }
+  $('sUse').textContent = dur(s.use); $('sOk').textContent = dur(s.ok); $('sFar').textContent = dur(s.far);
+  $('sLink').textContent = dur(s.link); $('sAir').textContent = dur(s.air); $('sRun').textContent = dur(s.run);
+  $('sWf').textContent = s.wf; $('sFb').textContent = s.fb; $('sFs').textContent = s.fs;
+  $('sWa').textContent = s.wa; $('sWl').textContent = s.wl;
+  $('sSf').textContent = s.sf; $('sSa').textContent = s.sa; $('sSl').textContent = s.sl; $('sBoot').textContent = s.boot;
+}
+
+const EV = { 1: 'Advarsel', 2: 'Sirene', 3: 'Tråden stoppet', 4: 'OK igen', 5: 'Afstand nulstillet', 6: 'Indstilling ændret', 7: 'Tændt' };
+function causeTags(c) {
+  const t = [];
+  if (c & 1) t.push('for langt væk'); if (c & 2) t.push('for lidt luft'); if (c & 4) t.push('ingen forbindelse');
+  return t.map(x => '<span class="tag">' + x + '</span>').join('');
+}
+function renderEvents() {
+  if (!events || !events.ev.length) { $('evList').textContent = 'Ingen hændelser endnu.'; return; }
+  // Enhedens tid er sekunder siden opstart; omregnes til klokkeslæt ud fra seneste læsning
+  const bootMs = Date.now() - events.up * 1000;
+  $('evList').innerHTML = events.ev.slice().reverse().map(([t, e, c]) => {
+    const d = new Date(bootMs + t * 1000);
+    const hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0'), ss = String(d.getSeconds()).padStart(2, '0');
+    return '<div class="ev"><time>' + hh + ':' + mm + ':' + ss + '</time><div>' + (EV[e] || ('Hændelse ' + e)) + causeTags(c) + '</div></div>';
+  }).join('');
+}
+
+function renderCfg() {
+  if (!cfg) return;
+  const a = document.activeElement;
+  if (a !== $('duct')) $('duct').value = cfg.duct;
+  if (a !== $('minpa')) $('minpa').value = cfg.min;
+  $('ductNote').textContent = 'Bruges kun til at regne luftmængden ud. Tilladt ' + cfg.ductlo + '–' + cfg.ducthi + ' mm.';
+  $('minNote').textContent = 'Under dette tryk regnes udsugningen som stoppet. Tilladt ' + cfg.minlo + '–' + cfg.minhi + ' Pa.';
+  $('cLim').textContent = fmtCm(cfg.lim) + ' cm';
+  $('cSir').textContent = cfg.sirms / 1000 + ' s';
+  $('cStop').textContent = cfg.stopms / 1000 + ' s';
+  $('cLow').textContent = cfg.lowms / 1000 + ' s';
+}
+
+/* ---------- Demo (uden enhed) ---------- */
+function startDemo() {
+  stopPolling();
+  const t0 = Date.now();
+  const mk = () => ({ run: 0, air: 0, use: 0, ok: 0, far: 0, link: 0, wf: 0, wa: 0, wl: 0, sf: 0, sa: 0, sl: 0, fb: 0, fs: 0, boot: 1 });
+  demo = { duct: 160, min: 50, ses: mk(), tot: Object.assign(mk(), { run: 41000, air: 30500, use: 29800, ok: 27100, far: 2400, link: 300, wf: 61, wa: 3, wl: 4, sf: 4, sa: 1, sl: 0, fb: 44, fs: 13, boot: 23 }),
+    ev: [[0, 7, 0]], fault: 0, faultAt: 0, offset: 0, last: 0 };
+  cfg = { lim: 0.6, min: 50, minlo: 30, minhi: 120, duct: 160, ductlo: 80, ducthi: 500, sirms: 3000, stopms: 10000, lowms: 5000, sat: 124 };
+  setConn('Demo', true);
+  $('connectBox').classList.add('hide');
+  const tick = () => {
+    const now = Date.now(), up = (now - t0) / 1000;
+    // Svejseren bevæger sig; en gang i mellem kommer han for langt væk
+    const cyc = up % 45;
+    let d = 0.38 + 0.08 * Math.sin(up / 3) + 0.02 * Math.random();
+    if (cyc > 30 && cyc < 39) d = 0.62 + (cyc - 30) * 0.03;
+    const p = 136.5;
+    const far = d > 0.6 && cyc > 32;
+    if (far && !demo.fault) { demo.fault = 1; demo.faultAt = now; demo.ev.push([Math.round(up), 1, 1]); demo.ses.wf++; }
+    let s = 0, sir = 0, left = -1;
+    if (demo.fault) {
+      const el = now - demo.faultAt;
+      if (!far) { demo.fault = 0; demo.ev.push([Math.round(up), 4, 1]); el >= 3000 ? demo.ses.fs++ : demo.ses.fb++; }
+      else { s = el >= 13000 ? 2 : 1; sir = el >= 3000 ? 1 : 0; left = Math.ceil(((sir ? 13000 : 3000) - el) / 1000);
+        if (sir && !demo.sirLogged) { demo.sirLogged = 1; demo.ev.push([Math.round(up), 2, 1]); } }
+    } else demo.sirLogged = 0;
+    if (Math.floor(up) > demo.last) {
+      demo.last = Math.floor(up);
+      for (const k of ['ses', 'tot']) { const x = demo[k]; x.run++; x.air++; x.use++; d > 0.6 ? x.far++ : x.ok++; }
+    }
+    live = { s, d, lk: 1, p, pv: 1, q: qFromPa(p), far: far ? 1 : 0, al: 0, sir, left, c: demo.fault ? 1 : 0, up: Math.round(up), r: demo.r || '' };
+    cfg.duct = demo.duct; cfg.min = demo.min;
+    stats = { ses: demo.ses, tot: demo.tot };
+    events = { up: Math.round(up), ev: demo.ev.slice(-25) };
+    pushHist(); renderLive();
+    if (++slowCount % 6 === 0) { renderStats(); renderEvents(); renderCfg(); }
+  };
+  renderCfg(); tick(); renderStats(); renderEvents();
+  pollTimer = setInterval(tick, 500);
+}
+function stopDemo() { demo = null; }
+function demoCmd(t) {
+  const [p, c, v] = t.split(';');
+  if (p !== '1234') { demo.r = 'forkert kode'; live.r = demo.r; return; }
+  if (c === 'air') { const a = +v; if (a < 30 || a > 120) demo.r = 'uden for graense'; else { demo.min = a; demo.r = 'ok'; } }
+  else if (c === 'duct') { const m = +v; if (m < 80 || m > 500) demo.r = 'uden for graense'; else { demo.duct = m; demo.r = 'ok'; } }
+  else if (c === 'reset') { for (const k in demo.tot) if (k !== 'boot') demo.tot[k] = 0; demo.r = 'ok'; }
+  else demo.r = 'ok';
+  live.r = demo.r; cfg.duct = demo.duct; cfg.min = demo.min; renderCfg(); renderStats();
+}
+
+/* ---------- Knapper ---------- */
+$('btnConnect').onclick = connect;
+$('btnDemo').onclick = startDemo;
+$('btnDisc').onclick = disconnect;
+$('btnDuct').onclick = () => sendCmd(pin() + ';duct;' + Math.round(+$('duct').value), $('cfgMsg'));
+$('btnMin').onclick = () => sendCmd(pin() + ';air;' + (+$('minpa').value), $('cfgMsg'));
+$('btnZero').onclick = () => { if (confirm('Nulstil afstanden nu? Håndtaget skal sidde ved udsugningen, ligesom når du bruger knappen.')) sendCmd(pin() + ';zero', $('actMsg')); };
+$('btnReset').onclick = () => { if (confirm('Slet statistikken "I alt"? Det kan ikke fortrydes.')) sendCmd(pin() + ';reset', $('actMsg')); };
+try { $('pin').value = localStorage.getItem('ws_pin') || ''; } catch (e) {}
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.p));
+  if (b.dataset.p === 'live') drawChart();
+});
+document.querySelectorAll('#segStats button').forEach(b => b.onclick = () => {
+  statsKey = b.dataset.k;
+  document.querySelectorAll('#segStats button').forEach(x => x.classList.toggle('on', x === b));
+  renderStats();
+});
+window.addEventListener('resize', drawChart);
+</script>
+</body>
+</html>
