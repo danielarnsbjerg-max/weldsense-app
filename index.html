@@ -217,14 +217,25 @@ nav button.on { color: var(--accent); font-weight: 600; }
       <div class="msg" id="cfgMsg"></div>
     </div>
     <div class="card">
-      <h2>Faste sikkerhedsgrænser</h2>
+      <h2>Alarm</h2>
+      <label for="limcm">Afstandsgrænse (cm)</label>
+      <div class="row"><input id="limcm" type="number" inputmode="numeric" step="1"><button class="btn" id="btnDist">Gem</button></div>
+      <div class="note" id="distNote"></div>
+      <label for="over">Tid over grænsen før advarsel (s)</label>
+      <div class="row"><input id="over" type="number" inputmode="decimal" step="0.5"><button class="btn" id="btnOver">Gem</button></div>
+      <div class="note" id="overNote"></div>
+      <label for="sir">Skærmen blinker før sirenen (s)</label>
+      <div class="row"><input id="sir" type="number" inputmode="decimal" step="0.5"><button class="btn" id="btnSir">Gem</button></div>
+      <div class="note" id="sirNote"></div>
+      <label for="stp">Sirene før tråden stoppes (s)</label>
+      <div class="row"><input id="stp" type="number" inputmode="decimal" step="1"><button class="btn" id="btnStp">Gem</button></div>
+      <div class="note" id="stpNote"></div>
+      <div class="msg" id="alarmMsg"></div>
       <table>
-        <tr><td>Afstandsgrænse</td><td id="cLim">–</td></tr>
-        <tr><td>Skærmen blinker før sirenen</td><td id="cSir">–</td></tr>
-        <tr><td>Sirene før tråden stoppes</td><td id="cStop">–</td></tr>
-        <tr><td>For lidt luft før alarm</td><td id="cLow">–</td></tr>
+        <tr><td>Advarsel ophører under</td><td id="cClr">–</td></tr>
+        <tr><td>For lidt luft før alarm (fast)</td><td id="cLow">–</td></tr>
       </table>
-      <div class="note">Disse kan kun ændres i koden. Alarmen kan ikke slås fra i appen.</div>
+      <div class="note">Grænserne er låst i boardet, så værdier udenfor bliver afvist. Alarmen kan ikke slås fra i appen.</div>
     </div>
     <div class="card">
       <h2>Handlinger</h2>
@@ -519,10 +530,17 @@ function renderCfg() {
   if (a !== $('minpa')) $('minpa').value = cfg.min;
   $('ductNote').textContent = 'Bruges kun til at regne luftmængden ud. Tilladt ' + cfg.ductlo + '–' + cfg.ducthi + ' mm.';
   $('minNote').textContent = 'Under dette tryk regnes udsugningen som stoppet. Tilladt ' + cfg.minlo + '–' + cfg.minhi + ' Pa.';
-  $('cLim').textContent = fmtCm(cfg.lim) + ' cm';
-  $('cSir').textContent = cfg.sirms / 1000 + ' s';
-  $('cStop').textContent = cfg.stopms / 1000 + ' s';
-  $('cLow').textContent = cfg.lowms / 1000 + ' s';
+  const sec = ms => (ms / 1000).toString().replace('.', ',');
+  if (a !== $('limcm')) $('limcm').value = fmtCm(cfg.lim);
+  if (a !== $('over')) $('over').value = cfg.overms / 1000;
+  if (a !== $('sir')) $('sir').value = cfg.sirms / 1000;
+  if (a !== $('stp')) $('stp').value = cfg.stopms / 1000;
+  $('distNote').textContent = 'Tilladt ' + cfg.limlo + '–' + cfg.limhi + ' cm.';
+  $('overNote').textContent = 'Tilladt ' + sec(cfg.overlo) + '–' + sec(cfg.overhi) + ' s. Kortere giver hurtigere advarsel, men flere falske alarmer ved jern.';
+  $('sirNote').textContent = 'Tilladt ' + sec(cfg.sirlo) + '–' + sec(cfg.sirhi) + ' s.';
+  $('stpNote').textContent = 'Tilladt ' + sec(cfg.stoplo) + '–' + sec(cfg.stophi) + ' s. Tråden stoppes ' + sec(cfg.sirms + cfg.stopms) + ' s efter advarslen.';
+  $('cClr').textContent = (fmtCm(cfg.lim) - 3) + ' cm';
+  $('cLow').textContent = sec(cfg.lowms) + ' s';
 }
 
 /* ---------- Demo (uden enhed) ---------- */
@@ -532,7 +550,7 @@ function startDemo() {
   const mk = () => ({ run: 0, air: 0, use: 0, ok: 0, far: 0, link: 0, wf: 0, wa: 0, wl: 0, sf: 0, sa: 0, sl: 0, fb: 0, fs: 0, boot: 1 });
   demo = { duct: 160, min: 50, ses: mk(), tot: Object.assign(mk(), { run: 41000, air: 30500, use: 29800, ok: 27100, far: 2400, link: 300, wf: 61, wa: 3, wl: 4, sf: 4, sa: 1, sl: 0, fb: 44, fs: 13, boot: 23 }),
     ev: [[0, 7, 0]], fault: 0, faultAt: 0, offset: 0, last: 0 };
-  cfg = { lim: 0.6, min: 50, minlo: 30, minhi: 120, duct: 160, ductlo: 80, ducthi: 500, sirms: 3000, stopms: 10000, lowms: 5000, sat: 124 };
+  cfg = { lim: 0.6, limlo: 40, limhi: 120, min: 50, minlo: 30, minhi: 120, duct: 160, ductlo: 80, ducthi: 500, overms: 2000, overlo: 500, overhi: 5000, sirms: 3000, sirlo: 0, sirhi: 10000, stopms: 10000, stoplo: 5000, stophi: 30000, lowms: 5000, sat: 124 };
   setConn('Demo', true);
   $('connectBox').classList.add('hide');
   const tick = () => {
@@ -570,6 +588,11 @@ function demoCmd(t) {
   const [p, c, v] = t.split(';');
   if (p !== '1234') { demo.r = 'forkert kode'; live.r = demo.r; return; }
   if (c === 'air') { const a = +v; if (a < 30 || a > 120) demo.r = 'uden for graense'; else { demo.min = a; demo.r = 'ok'; } }
+  else if (c === 'dist') { const m = +v; if (m < 40 || m > 120) demo.r = 'uden for graense'; else { cfg.lim = m / 100; demo.r = 'ok'; } }
+  else if (c === 'over' || c === 'siren' || c === 'stop') {
+    const k = { over: ['overms', 500, 5000], siren: ['sirms', 0, 10000], stop: ['stopms', 5000, 30000] }[c], m = +v;
+    if (m < k[1] || m > k[2]) demo.r = 'uden for graense'; else { cfg[k[0]] = m; demo.r = 'ok'; }
+  }
   else if (c === 'duct') { const m = +v; if (m < 80 || m > 500) demo.r = 'uden for graense'; else { demo.duct = m; demo.r = 'ok'; } }
   else if (c === 'reset') { for (const k in demo.tot) if (k !== 'boot') demo.tot[k] = 0; demo.r = 'ok'; }
   else demo.r = 'ok';
@@ -582,6 +605,11 @@ $('btnDemo').onclick = startDemo;
 $('btnDisc').onclick = disconnect;
 $('btnDuct').onclick = () => sendCmd(pin() + ';duct;' + Math.round(+$('duct').value), $('cfgMsg'));
 $('btnMin').onclick = () => sendCmd(pin() + ';air;' + (+$('minpa').value), $('cfgMsg'));
+const secMs = id => Math.round(parseFloat(String($(id).value).replace(',', '.')) * 1000);
+$('btnDist').onclick = () => sendCmd(pin() + ';dist;' + Math.round(+$('limcm').value), $('alarmMsg'));
+$('btnOver').onclick = () => sendCmd(pin() + ';over;' + secMs('over'), $('alarmMsg'));
+$('btnSir').onclick = () => sendCmd(pin() + ';siren;' + secMs('sir'), $('alarmMsg'));
+$('btnStp').onclick = () => sendCmd(pin() + ';stop;' + secMs('stp'), $('alarmMsg'));
 $('btnZero').onclick = () => { if (confirm('Nulstil afstanden nu? Håndtaget skal sidde ved udsugningen, ligesom når du bruger knappen.')) sendCmd(pin() + ';zero', $('actMsg')); };
 $('btnReset').onclick = () => { if (confirm('Slet statistikken "I alt"? Det kan ikke fortrydes.')) sendCmd(pin() + ';reset', $('actMsg')); };
 try { $('pin').value = localStorage.getItem('ws_pin') || ''; } catch (e) {}
